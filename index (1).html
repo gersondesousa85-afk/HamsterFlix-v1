@@ -113,6 +113,7 @@
         .overflow-hidden { overflow: hidden; }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
         .result-count { font-size: 14px; color: #57606a; padding: 8px 16px; background: #f6f8fa; border-radius: 6px; margin-bottom: 8px; }
+        .text-tiny { font-size: 12px; color: #57606a; }
         @media (min-width: 1024px) { .container { flex-direction: row; } .sidebar { width: 384px; } }
         @media (max-width: 768px) { .header-content { flex-direction: column; } .tabs { flex-wrap: wrap; } }
     </style>
@@ -130,15 +131,22 @@
             <form id="loginForm">
                 <div class="form-group">
                     <label>Server URL</label>
-                    <input type="text" id="serverUrl" placeholder="http://example.com:8080" required>
+                    <input type="text" id="serverUrl" placeholder="http://example.com:8080">
                 </div>
                 <div class="form-group">
                     <label>Username</label>
-                    <input type="text" id="username" required>
+                    <input type="text" id="username">
                 </div>
                 <div class="form-group">
                     <label>Password</label>
-                    <input type="password" id="password" required>
+                    <input type="password" id="password">
+                </div>
+                <div class="form-group">
+                    <label>Playlist from API</label>
+                    <select id="apiPlaylistSelect">
+                        <option value="">Automatic (best available)</option>
+                    </select>
+                    <p class="text-tiny mt-4">The app will also try to auto-connect with the best list when opening.</p>
                 </div>
                 <button type="submit" class="btn btn-primary btn-full">Connect</button>
             </form>
@@ -279,13 +287,16 @@
                 catCache: {},
                 page: 0,
                 pageSize: 50,
-                hls: null
+                hls: null,
+                playlistApiUrl: 'https://snippet.host/aifzzq/raw',
+                playlistOptions: []
             },
 
             init() {
                 this.loadFavorites();
-                this.checkUrl();
                 this.bindEvents();
+                this.loadPlaylistApi();
+                this.checkUrl();
             },
 
             bindEvents() {
@@ -379,10 +390,27 @@
 
             async login(e) {
                 e.preventDefault();
-                const serverUrl = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
-                const username = document.getElementById('username').value.trim();
-                const password = document.getElementById('password').value.trim();
-                this.state.creds = { serverUrl, username, password };
+                const selected = document.getElementById('apiPlaylistSelect').value;
+                let creds = null;
+
+                if (selected) {
+                    creds = this.parsePlaylistUrl(selected);
+                    if (!creds) {
+                        this.notify('❌ Invalid playlist URL selected', 'error');
+                        return;
+                    }
+                } else {
+                    const serverUrl = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+                    const username = document.getElementById('username').value.trim();
+                    const password = document.getElementById('password').value.trim();
+                    if (!serverUrl || !username || !password) {
+                        this.notify('⚠️ Fill server, username and password or select a playlist', 'warning');
+                        return;
+                    }
+                    creds = { serverUrl, username, password };
+                }
+
+                this.state.creds = creds;
 
                 try {
                     this.notify('🔄 Connecting to IPTV server...', 'info');
@@ -401,6 +429,97 @@
                     this.state.creds = null;
                     this.state.userInfo = null;
                 }
+            },
+
+            async loadPlaylistApi() {
+                try {
+                    this.notify('🌐 Loading playlist API...', 'info');
+                    const res = await fetch(this.state.playlistApiUrl, { cache: 'no-store' });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const txt = await res.text();
+                    const urls = txt.split(/\r?\n/).map(v => v.trim()).filter(Boolean);
+                    const parsed = urls.map(url => ({ url, creds: this.parsePlaylistUrl(url) })).filter(v => v.creds);
+                    this.state.playlistOptions = parsed;
+                    this.renderPlaylistOptions();
+                    this.notify(`✅ Loaded ${parsed.length} playlist options`, 'success');
+                    if (!this.state.pendingConfig && !this.state.creds) {
+                        await this.autoLoginFromApi();
+                    }
+                } catch (error) {
+                    console.error('Playlist API error:', error);
+                    this.notify('⚠️ Could not load API playlists, manual login still works', 'warning');
+                    this.renderPlaylistOptions();
+                }
+            },
+
+            renderPlaylistOptions() {
+                const select = document.getElementById('apiPlaylistSelect');
+                select.innerHTML = '<option value="">Automatic (best available)</option>';
+
+                this.state.playlistOptions.forEach((item, idx) => {
+                    const opt = document.createElement('option');
+                    opt.value = item.url;
+                    opt.textContent = `${idx + 1}. ${item.creds.username} @ ${item.creds.serverUrl}`;
+                    select.appendChild(opt);
+                });
+            },
+
+            parsePlaylistUrl(url) {
+                try {
+                    const u = new URL(url);
+                    const username = u.searchParams.get('username');
+                    const password = u.searchParams.get('password');
+                    const serverUrl = `${u.protocol}//${u.host}`;
+                    if (!username || !password || !serverUrl) return null;
+                    return { serverUrl, username, password };
+                } catch (error) {
+                    return null;
+                }
+            },
+
+            async autoLoginFromApi() {
+                if (!this.state.playlistOptions.length) return;
+                this.notify('🤖 Trying auto-login with best API list...', 'info');
+                const candidates = await this.rankBestPlaylists();
+
+                for (const candidate of candidates) {
+                    const ok = await this.tryCreds(candidate.creds, false);
+                    if (ok) {
+                        this.notify(`✅ Auto-connected with ${candidate.creds.username}`, 'success');
+                        return;
+                    }
+                }
+
+                this.notify('⚠️ Auto-login failed, choose another list or add manual credentials', 'warning');
+            },
+
+            async rankBestPlaylists() {
+                const probes = this.state.playlistOptions.map(async (item) => {
+                    const started = performance.now();
+                    const ok = await this.tryCreds(item.creds, true);
+                    const elapsed = performance.now() - started;
+                    return { ...item, ok, elapsed };
+                });
+
+                const results = await Promise.all(probes);
+                return results.filter(r => r.ok).sort((a, b) => a.elapsed - b.elapsed);
+            },
+
+            async tryCreds(creds, dryRun = false) {
+                try {
+                    const url = `${creds.serverUrl}/player_api.php?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    if (data.user_info?.auth === 1) {
+                        if (!dryRun) {
+                            this.state.creds = creds;
+                            this.state.userInfo = data.user_info;
+                            await this.loadApp();
+                        }
+                        return true;
+                    }
+                } catch (error) {}
+                return false;
             },
 
             async loadApp() {
