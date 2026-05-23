@@ -1,0 +1,1822 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<!--
+    HamsterFlix IPTV Player
+    Modern Premium Streaming App
+-->
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>HamsterFlix</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --bg2: #12121a;
+      --bg3: #1a1a28;
+      --surface: rgba(255,255,255,0.05);
+      --surface2: rgba(255,255,255,0.08);
+      --border: rgba(255,255,255,0.1);
+      --accent: #7c3aed;
+      --accent2: #a855f7;
+      --accent-glow: rgba(124,58,237,0.3);
+      --text: #f1f0f5;
+      --text2: #a09ab8;
+      --text3: #6b648a;
+      --success: #22c55e;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --info: #3b82f6;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --shadow: 0 8px 32px rgba(0,0,0,0.5);
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    #app { display: flex; flex-direction: column; height: 100%; }
+
+    /* ── Bottom Nav ── */
+    .bottom-nav {
+      display: flex;
+      background: rgba(10,10,15,0.97);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border);
+      padding: 8px 0;
+      padding-bottom: calc(8px + var(--safe-bottom));
+      flex-shrink: 0;
+      position: relative;
+      z-index: 100;
+    }
+
+    .nav-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 6px 4px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+      color: var(--text3);
+      border: none;
+      background: none;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+    }
+    .nav-item.active { color: var(--accent2); }
+    .nav-item.active .nav-icon { transform: scale(1.15); }
+    .nav-icon { font-size: 22px; transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1); line-height: 1; }
+
+    /* ── Pages ── */
+    .pages-wrap { flex: 1; overflow: hidden; position: relative; }
+
+    .page {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      display: none;
+      padding-bottom: 16px;
+    }
+    .page.active { display: block; }
+
+    /* ── Page Header ── */
+    .page-header {
+      padding: 16px 20px 12px;
+      padding-top: calc(16px + var(--safe-top));
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: linear-gradient(to bottom, var(--bg) 75%, transparent);
+    }
+    .page-header-row { display: flex; align-items: center; justify-content: space-between; }
+    .page-title {
+      font-size: 28px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--text), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── Server Button ── */
+    .server-btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none;
+      border-radius: 20px;
+      padding: 8px 14px;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      position: relative;
+      animation: headerPulse 2.5s ease-in-out infinite;
+      white-space: nowrap;
+    }
+    @keyframes headerPulse {
+      0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+      50% { box-shadow: 0 0 0 8px rgba(124,58,237,0); }
+    }
+    .notif-dot {
+      width: 8px; height: 8px;
+      background: #f59e0b;
+      border-radius: 50%;
+      position: absolute;
+      top: -2px; right: -2px;
+      animation: blink 1.5s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* ── Search ── */
+    .search-wrap { position: relative; padding: 0 20px 16px; }
+    .search-icon {
+      position: absolute;
+      left: 36px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--text3);
+      font-size: 16px;
+      pointer-events: none;
+    }
+    .search-input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 16px 12px 44px;
+      color: var(--text);
+      font-size: 16px;
+      transition: all 0.2s;
+      -webkit-appearance: none;
+    }
+    .search-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .search-input::placeholder { color: var(--text3); }
+
+    /* ── Category Pills ── */
+    .cats-scroll {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 0 20px 16px;
+      scrollbar-width: none;
+    }
+    .cats-scroll::-webkit-scrollbar { display: none; }
+    .cat-pill {
+      flex-shrink: 0;
+      padding: 7px 16px;
+      border-radius: 50px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text2);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .cat-pill.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+      box-shadow: 0 4px 12px var(--accent-glow);
+    }
+
+    /* ── Content Items ── */
+    .content-list { padding: 0 20px; }
+    .content-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.18s;
+      border: 1px solid transparent;
+    }
+    .content-item:active { transform: scale(0.98); background: var(--surface2); }
+    .content-thumb {
+      width: 50px; height: 50px;
+      border-radius: 10px;
+      background: var(--bg3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .content-thumb img { width:100%; height:100%; object-fit:cover; }
+    .content-info { flex: 1; min-width: 0; }
+    .content-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-bottom: 3px;
+    }
+    .content-meta { font-size: 12px; color: var(--text3); }
+    .content-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+    .icon-btn {
+      background: none; border: none;
+      cursor: pointer;
+      color: var(--text3);
+      font-size: 20px;
+      padding: 4px;
+      border-radius: 8px;
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center;
+      line-height: 1;
+    }
+    .icon-btn:active { transform: scale(0.88); }
+    .icon-btn.fav-active { color: #f59e0b; }
+
+    /* ── Result Badge ── */
+    .result-badge {
+      display: none;
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      padding: 4px 14px;
+      font-size: 12px;
+      color: var(--text3);
+      margin: 0 20px 12px;
+      width: fit-content;
+    }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 8px;
+      border-radius: 50px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-live { background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.3); }
+    .badge-movie { background:rgba(59,130,246,0.2); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); }
+    .badge-series { background:rgba(168,85,247,0.2); color:#c084fc; border:1px solid rgba(168,85,247,0.3); }
+
+    /* ── Download Button ── */
+    .dl-btn {
+      background: rgba(34,197,94,0.15);
+      border: 1px solid rgba(34,197,94,0.25);
+      color: #22c55e;
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex; align-items: center; gap: 3px;
+      font-weight: 600;
+    }
+    .dl-btn:active { transform: scale(0.93); }
+
+    /* ── Skeleton ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg3) 25%, var(--surface) 50%, var(--bg3) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 8px;
+    }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    .skel-item { display:flex; gap:14px; padding:14px; margin-bottom:8px; }
+
+    /* ── Empty State ── */
+    .empty { text-align:center; padding:60px 20px; color:var(--text3); }
+    .empty-icon { font-size:52px; margin-bottom:14px; }
+    .empty-title { font-size:18px; font-weight:600; color:var(--text2); margin-bottom:6px; }
+    .empty-sub { font-size:14px; }
+
+    /* ── Section Title ── */
+    .section-title {
+      font-size: 18px; font-weight: 700;
+      padding: 0 20px 12px;
+      color: var(--text);
+    }
+    .section-title span { color:var(--text3); font-size:14px; font-weight:400; margin-left:8px; }
+
+    /* ── Continue Watching ── */
+    .continue-scroll {
+      display: flex; gap: 12px;
+      overflow-x: auto;
+      padding: 0 20px 20px;
+      scrollbar-width: none;
+    }
+    .continue-scroll::-webkit-scrollbar { display: none; }
+    .continue-card {
+      flex-shrink: 0; width: 158px;
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: var(--bg3);
+      transition: transform 0.2s;
+    }
+    .continue-card:active { transform: scale(0.96); }
+    .continue-thumb {
+      width: 158px; height: 88px;
+      background: var(--bg3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 30px;
+      position: relative;
+      overflow: hidden;
+    }
+    .continue-thumb img { width:100%; height:100%; object-fit:cover; }
+    .continue-overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .play-circle {
+      width: 34px; height: 34px;
+      background: rgba(255,255,255,0.9);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      padding-left: 2px;
+    }
+    .continue-prog-bar {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 3px; background: rgba(255,255,255,0.15);
+    }
+    .continue-prog-fill { height: 100%; background: var(--accent2); }
+    .continue-info { padding: 8px 10px; }
+    .continue-name {
+      font-size: 12px; font-weight: 600; color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .continue-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+    /* ── Modals ── */
+    .modal {
+      display: none; position: fixed; inset: 0;
+      z-index: 200;
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      align-items: flex-end;
+    }
+    .modal.active { display: flex; }
+    .modal-center { align-items: center; justify-content: center; }
+
+    .modal-sheet {
+      background: var(--bg2);
+      border-radius: 24px 24px 0 0;
+      width: 100%; max-height: 92vh;
+      padding-bottom: calc(20px + var(--safe-bottom));
+      overflow-y: auto;
+      animation: slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .modal-card {
+      background: var(--bg2);
+      border-radius: 24px;
+      width: 90%; max-width: 440px;
+      margin: auto;
+      padding: 32px 28px;
+      animation: fadeScale 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+    @keyframes fadeScale { from{opacity:0;transform:scale(0.88)} to{opacity:1;transform:scale(1)} }
+
+    .modal-handle {
+      width: 40px; height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      margin: 12px auto 20px;
+    }
+    .modal-title { font-size: 20px; font-weight: 700; padding: 0 20px 16px; }
+
+    /* ── Forms ── */
+    .form-group { margin-bottom: 14px; }
+    .form-label {
+      display: block; font-size: 12px; font-weight: 700;
+      color: var(--text3); margin-bottom: 7px;
+      text-transform: uppercase; letter-spacing: 0.6px;
+    }
+    .form-input {
+      width: 100%; padding: 14px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text); font-size: 16px;
+      transition: all 0.2s;
+      -webkit-appearance: none;
+    }
+    .form-input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow); }
+    .form-input::placeholder { color: var(--text3); }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 14px 22px;
+      border-radius: 12px;
+      font-weight: 700; font-size: 15px;
+      cursor: pointer; border: none;
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: white;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+    .btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+    .btn-danger { background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); }
+
+    /* ── Notifications ── */
+    #notifications {
+      position: fixed;
+      top: calc(20px + var(--safe-top));
+      left: 50%; transform: translateX(-50%);
+      z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      pointer-events: none;
+      width: 88%; max-width: 380px;
+    }
+    .notif {
+      background: rgba(20,20,32,0.97);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 18px;
+      font-size: 14px; font-weight: 500;
+      animation: notifIn 0.3s cubic-bezier(0.34,1.56,0.64,1);
+      box-shadow: var(--shadow);
+      pointer-events: all;
+      width: 100%; text-align: center;
+    }
+    .notif.success { border-color:rgba(34,197,94,0.4); color:#86efac; }
+    .notif.error   { border-color:rgba(239,68,68,0.4); color:#fca5a5; }
+    .notif.warning { border-color:rgba(245,158,11,0.4); color:#fcd34d; }
+    .notif.info    { border-color:rgba(59,130,246,0.4); color:#93c5fd; }
+    .notif.hiding  { animation: notifOut 0.2s ease-in forwards; }
+    @keyframes notifIn  { from{opacity:0;transform:scale(0.8) translateY(-8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+    @keyframes notifOut { to{opacity:0;transform:scale(0.8) translateY(-8px)} }
+
+    /* ── Login Page ── */
+    #loginPage {
+      display: none; position: fixed; inset: 0; z-index: 300;
+      background: var(--bg); overflow-y: auto;
+      align-items: center; justify-content: center; flex-direction: column;
+    }
+    #loginPage.active { display: flex; }
+    .login-wrap { width: 90%; max-width: 420px; padding: 48px 0; }
+    .login-logo { text-align: center; margin-bottom: 40px; }
+    .login-logo-icon { font-size: 60px; display: block; margin-bottom: 12px; }
+    .login-logo-title {
+      font-size: 34px; font-weight: 900;
+      background: linear-gradient(135deg, #fff, var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .login-logo-sub { font-size: 14px; color: var(--text3); margin-top: 6px; }
+
+    /* ── Player ── */
+    #playerPage {
+      display: none; position: fixed; inset: 0;
+      z-index: 500; background: #000;
+      flex-direction: column;
+    }
+    #playerPage.active { display: flex; }
+
+    .player-video-wrap {
+      flex: 1; position: relative;
+      background: #000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #mainVideo { width:100%; height:100%; object-fit:contain; }
+
+    .player-overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; justify-content: space-between;
+      opacity: 0; transition: opacity 0.3s;
+      background: linear-gradient(to bottom,
+        rgba(0,0,0,0.65) 0%,
+        transparent 28%,
+        transparent 58%,
+        rgba(0,0,0,0.85) 100%);
+      pointer-events: none;
+    }
+    .player-overlay.visible { opacity: 1; pointer-events: all; }
+
+    .player-top {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px;
+      padding-top: calc(16px + var(--safe-top));
+    }
+    .player-back-btn {
+      width: 40px; height: 40px;
+      background: rgba(0,0,0,0.5);
+      border: none; border-radius: 50%;
+      color: white; font-size: 20px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .player-title-wrap { flex:1; min-width:0; }
+    .player-title {
+      font-size: 16px; font-weight: 700; color: white;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .player-subtitle { font-size: 12px; color: rgba(255,255,255,0.65); margin-top:2px; }
+
+    .player-controls {
+      padding: 16px;
+      padding-bottom: calc(16px + var(--safe-bottom));
+    }
+
+    .player-seek-wrap { margin-bottom: 10px; }
+    .player-seek {
+      width: 100%; height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+      cursor: pointer;
+      -webkit-appearance: none; appearance: none;
+      outline: none;
+    }
+    .player-seek::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    }
+    .player-time {
+      display: flex; justify-content: space-between;
+      color: rgba(255,255,255,0.65); font-size: 11px; margin-top: 5px;
+    }
+
+    .player-btns {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .player-btn {
+      background: none; border: none; color: white;
+      font-size: 26px; cursor: pointer; padding: 8px;
+      transition: transform 0.15s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .player-btn:active { transform: scale(0.82); }
+    .player-center-btn {
+      width: 62px; height: 62px;
+      background: rgba(255,255,255,0.18);
+      backdrop-filter: blur(10px);
+      border-radius: 50%; border: none; color: white;
+      font-size: 28px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .player-center-btn:active { background:rgba(255,255,255,0.32); transform:scale(0.94); }
+
+    .buffer-bar {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 3px; background: rgba(255,255,255,0.08);
+    }
+    .buffer-fill { height:100%; background:var(--accent2); transition:width 0.3s; }
+
+    .buffer-spinner {
+      position: absolute; top:50%; left:50%;
+      transform: translate(-50%,-50%);
+      display: none; flex-direction: column; align-items: center; gap: 10px;
+    }
+    .buffer-spinner.show { display: flex; }
+    .spinner {
+      width: 46px; height: 46px;
+      border: 3px solid rgba(255,255,255,0.15);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to{transform:rotate(360deg)} }
+
+    /* ── Server Modal Items ── */
+    .server-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px; background: var(--surface);
+      border-radius: 12px; margin-bottom: 8px;
+      border: 2px solid transparent;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .server-item.current { border-color: var(--accent); background: rgba(124,58,237,0.12); }
+    .server-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%; background: var(--text3); flex-shrink: 0;
+    }
+    .server-dot.on { background: var(--success); box-shadow: 0 0 8px var(--success); }
+
+    /* ── Episodes ── */
+    .season-title {
+      font-size: 13px; font-weight: 700; color: var(--text3);
+      padding: 14px 20px 8px;
+      text-transform: uppercase; letter-spacing: 0.6px;
+    }
+
+    /* ── Code Box ── */
+    .code-box {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px;
+      word-break: break-all;
+      font-family: monospace; font-size: 12px;
+      color: var(--accent2); max-height: 90px; overflow-y: auto;
+      margin-bottom: 12px;
+    }
+
+    /* ── Home Quick Grid ── */
+    .quick-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px; padding: 0 20px 20px;
+    }
+    .quick-card {
+      display: flex; flex-direction: column; align-items: flex-start;
+      padding: 18px; background: var(--surface);
+      border-radius: var(--radius); cursor: pointer;
+      transition: all 0.2s; border: 1px solid var(--border);
+    }
+    .quick-card:active { transform: scale(0.96); background: var(--surface2); }
+    .quick-icon { font-size: 28px; margin-bottom: 8px; }
+    .quick-title { font-size: 15px; font-weight: 700; }
+    .quick-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+  </style>
+</head>
+<body>
+
+<div id="notifications"></div>
+
+<!-- ══ LOGIN PAGE ══ -->
+<div id="loginPage" class="active">
+  <div class="login-wrap">
+    <div class="login-logo">
+      <span class="login-logo-icon">🐹</span>
+      <div class="login-logo-title">HamsterFlix</div>
+      <div class="login-logo-sub">Streaming Premium</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">URL do Servidor</label>
+      <input type="url" id="serverUrl" class="form-input" placeholder="http://servidor.com:8080"
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Utilizador</label>
+      <input type="text" id="username" class="form-input" placeholder="Nome de utilizador"
+        autocomplete="off" autocorrect="off" autocapitalize="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Palavra-passe</label>
+      <input type="password" id="password" class="form-input" placeholder="Palavra-passe">
+    </div>
+    <button id="loginBtn" class="btn btn-primary" style="margin-top:8px;">
+      <span>🚀</span> Entrar
+    </button>
+    <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3);">
+      Tem um link partilhado? Abra-o diretamente no browser.
+    </p>
+  </div>
+</div>
+
+<!-- ══ DECRYPT MODAL ══ -->
+<div id="passwordModal" class="modal modal-center">
+  <div class="modal-card">
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="font-size:44px;margin-bottom:10px;">🔐</div>
+      <div style="font-size:20px;font-weight:700;">Configuração Encriptada</div>
+      <div style="font-size:14px;color:var(--text3);margin-top:6px;">Introduza a palavra-passe para desencriptar</div>
+    </div>
+    <div class="form-group">
+      <input type="password" id="decryptPassword" class="form-input" placeholder="Palavra-passe">
+    </div>
+    <button id="decryptBtn" class="btn btn-primary">Desencriptar</button>
+  </div>
+</div>
+
+<!-- ══ MAIN APP ══ -->
+<div id="app">
+
+  <div class="pages-wrap">
+
+    <!-- HOME PAGE -->
+    <div id="homePage" class="page active">
+      <div class="page-header">
+        <div class="page-header-row">
+          <div class="page-title">HamsterFlix</div>
+          <button class="server-btn" id="homeServerBtn">
+            <span>🔄</span> Servidor
+            <span class="notif-dot"></span>
+          </button>
+        </div>
+        <div id="expiryBadge" style="margin-top:8px;display:none;"></div>
+      </div>
+
+      <div id="continueSection" style="display:none;">
+        <div class="section-title">Continuar a Ver</div>
+        <div id="continueList" class="continue-scroll"></div>
+      </div>
+
+      <div class="quick-grid" id="quickGrid">
+        <div class="quick-card" onclick="nav.go('channels')">
+          <span class="quick-icon">📺</span>
+          <span class="quick-title">Canais TV</span>
+          <span class="quick-sub" id="liveCount">A carregar…</span>
+        </div>
+        <div class="quick-card" onclick="nav.go('movies')">
+          <span class="quick-icon">🎬</span>
+          <span class="quick-title">Filmes</span>
+          <span class="quick-sub" id="moviesCount">A carregar…</span>
+        </div>
+        <div class="quick-card" onclick="nav.go('series')">
+          <span class="quick-icon">🎭</span>
+          <span class="quick-title">Séries</span>
+          <span class="quick-sub" id="seriesCount">A carregar…</span>
+        </div>
+        <div class="quick-card" onclick="nav.go('favorites')">
+          <span class="quick-icon">⭐</span>
+          <span class="quick-title">Favoritos</span>
+          <span class="quick-sub" id="favCountHome">0 guardados</span>
+        </div>
+      </div>
+
+      <div style="padding:0 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:14px;font-weight:600;color:var(--text2);">👤 <span id="userLabel"></span></span>
+        <button onclick="app.logout()" class="btn btn-danger" style="width:auto;padding:8px 16px;font-size:13px;">Sair</button>
+      </div>
+
+      <div style="padding:0 20px;">
+        <button onclick="app.showShare()" class="btn btn-secondary" style="font-size:13px;padding:10px;">🔗 Partilhar Configuração</button>
+      </div>
+    </div>
+
+    <!-- CHANNELS PAGE -->
+    <div id="channelsPage" class="page">
+      <div class="page-header">
+        <div class="page-header-row">
+          <div class="page-title">Canais TV</div>
+          <button class="server-btn" onclick="app.showServerModal()">
+            <span>🔄</span> Servidor
+            <span class="notif-dot"></span>
+          </button>
+        </div>
+      </div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="search" id="liveSearch" class="search-input" placeholder="Pesquisar canais…">
+      </div>
+      <div id="liveCats" class="cats-scroll"></div>
+      <div id="liveResultBadge" class="result-badge"></div>
+      <div id="liveList" class="content-list"></div>
+    </div>
+
+    <!-- MOVIES PAGE -->
+    <div id="moviesPage" class="page">
+      <div class="page-header">
+        <div class="page-header-row">
+          <div class="page-title">Filmes</div>
+          <button class="server-btn" onclick="app.showServerModal()">
+            <span>🔄</span> Servidor
+            <span class="notif-dot"></span>
+          </button>
+        </div>
+      </div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="search" id="moviesSearch" class="search-input" placeholder="Pesquisar filmes…">
+      </div>
+      <div id="moviesCats" class="cats-scroll"></div>
+      <div id="moviesResultBadge" class="result-badge"></div>
+      <div id="moviesList" class="content-list"></div>
+    </div>
+
+    <!-- SERIES PAGE -->
+    <div id="seriesPage" class="page">
+      <div class="page-header">
+        <div class="page-header-row">
+          <div class="page-title">Séries</div>
+          <button class="server-btn" onclick="app.showServerModal()">
+            <span>🔄</span> Servidor
+            <span class="notif-dot"></span>
+          </button>
+        </div>
+      </div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="search" id="seriesSearch" class="search-input" placeholder="Pesquisar séries…">
+      </div>
+      <div id="seriesCats" class="cats-scroll"></div>
+      <div id="seriesResultBadge" class="result-badge"></div>
+      <div id="seriesList" class="content-list"></div>
+    </div>
+
+    <!-- FAVORITES PAGE -->
+    <div id="favoritesPage" class="page">
+      <div class="page-header">
+        <div class="page-title">Favoritos</div>
+      </div>
+
+      <div id="favContinueSection" style="display:none;">
+        <div class="section-title">Continuar a Ver</div>
+        <div id="favContinueList" class="continue-scroll"></div>
+      </div>
+
+      <div class="section-title">Guardados <span id="favCountBadge">0</span></div>
+      <div id="favList" class="content-list">
+        <div class="empty">
+          <div class="empty-icon">⭐</div>
+          <div class="empty-title">Sem favoritos</div>
+          <div class="empty-sub">Toque na estrela em qualquer conteúdo</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /pages-wrap -->
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-page="home" onclick="nav.go('home')">
+      <span class="nav-icon">🏠</span><span>Início</span>
+    </button>
+    <button class="nav-item" data-page="channels" onclick="nav.go('channels')">
+      <span class="nav-icon">📺</span><span>Canais</span>
+    </button>
+    <button class="nav-item" data-page="movies" onclick="nav.go('movies')">
+      <span class="nav-icon">🎬</span><span>Filmes</span>
+    </button>
+    <button class="nav-item" data-page="series" onclick="nav.go('series')">
+      <span class="nav-icon">🎭</span><span>Séries</span>
+    </button>
+    <button class="nav-item" data-page="favorites" onclick="nav.go('favorites')">
+      <span class="nav-icon">⭐</span><span>Favoritos</span>
+    </button>
+  </nav>
+
+</div><!-- /app -->
+
+<!-- ══ PLAYER ══ -->
+<div id="playerPage">
+  <div class="player-video-wrap" id="playerWrap">
+    <video id="mainVideo" playsinline webkit-playsinline x5-playsinline></video>
+
+    <div class="buffer-spinner" id="bufSpinner">
+      <div class="spinner"></div>
+      <span style="color:rgba(255,255,255,0.8);font-size:12px;">A carregar…</span>
+    </div>
+
+    <div class="player-overlay" id="playerOverlay">
+      <div class="player-top">
+        <button class="player-back-btn" id="playerBack">&#8592;</button>
+        <div class="player-title-wrap">
+          <div class="player-title" id="playerTitle"></div>
+          <div class="player-subtitle" id="playerSubtitle"></div>
+        </div>
+        <button class="player-btn" id="playerDlBtn" style="font-size:22px;display:none;" title="Download">⬇️</button>
+      </div>
+
+      <div class="player-controls">
+        <div class="player-seek-wrap" id="seekWrap" style="display:none;">
+          <input type="range" class="player-seek" id="playerSeek" min="0" max="100" step="0.1" value="0">
+          <div class="player-time">
+            <span id="timeCurrent">0:00</span>
+            <span id="timeDuration">0:00</span>
+          </div>
+        </div>
+        <div class="player-btns">
+          <button class="player-btn" id="btnMute">🔊</button>
+          <button class="player-btn" id="btnRew" style="display:none;">⏪</button>
+          <button class="player-center-btn" id="btnPlay">⏸</button>
+          <button class="player-btn" id="btnFwd" style="display:none;">⏩</button>
+          <button class="player-btn" id="btnFs">⛶</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="buffer-bar">
+      <div class="buffer-fill" id="bufFill" style="width:0%"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SERVER MODAL ══ -->
+<div id="serverModal" class="modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔄 Trocar Servidor</div>
+    <div style="padding:0 20px;">
+      <div style="background:var(--surface);border-radius:12px;padding:14px;margin-bottom:16px;border:1px solid var(--border);">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.6px;font-weight:700;margin-bottom:6px;">Servidor Atual</div>
+        <div id="curServerUrl" style="font-size:13px;color:var(--accent2);word-break:break-all;font-family:monospace;"></div>
+        <div id="curServerUser" style="font-size:12px;color:var(--text2);margin-top:4px;"></div>
+      </div>
+
+      <div id="savedServersList"></div>
+
+      <div style="margin-top:16px;">
+        <div style="font-size:14px;font-weight:700;color:var(--text2);margin-bottom:12px;">➕ Novo Servidor</div>
+        <div class="form-group">
+          <input type="url" id="newSrvUrl" class="form-input" placeholder="URL do servidor">
+        </div>
+        <div class="form-group">
+          <input type="text" id="newSrvUser" class="form-input" placeholder="Utilizador">
+        </div>
+        <div class="form-group">
+          <input type="password" id="newSrvPass" class="form-input" placeholder="Palavra-passe">
+        </div>
+        <button id="addSrvBtn" class="btn btn-primary">
+          <span>🔌</span> Ligar a Este Servidor
+        </button>
+      </div>
+
+      <div style="margin-top:12px;">
+        <button onclick="app.closeModal('serverModal')" class="btn btn-secondary">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ EPISODES MODAL ══ -->
+<div id="episodesModal" class="modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="episodesTitle">Episódios</div>
+    <div id="episodesList"></div>
+  </div>
+</div>
+
+<!-- ══ SHARE MODAL ══ -->
+<div id="shareModal" class="modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔗 Partilhar Configuração</div>
+    <div style="padding:0 20px;">
+      <div id="shareStep1">
+        <p style="font-size:14px;color:var(--text3);margin-bottom:16px;">Define uma palavra-passe para encriptar a tua configuração antes de partilhar.</p>
+        <div class="form-group">
+          <input type="password" id="sharePassword" class="form-input" placeholder="Palavra-passe (mín. 4 caracteres)">
+        </div>
+        <button id="generateBtn" class="btn btn-primary">Gerar URL</button>
+      </div>
+      <div id="shareStep2" style="display:none;">
+        <div class="code-box" id="shareUrlBox"></div>
+        <p style="font-size:14px;color:var(--text3);margin-bottom:16px;">
+          Palavra-passe: <strong style="color:var(--text);" id="sharePassShow"></strong>
+        </p>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button id="copyBtn" class="btn btn-secondary" style="flex:1;">📋 Copiar</button>
+          <button id="testBtn" class="btn btn-secondary" style="flex:1;">🔗 Testar</button>
+        </div>
+        <button id="shareBackBtn" class="btn btn-secondary">Gerar Novo</button>
+      </div>
+      <div style="margin-top:12px;">
+        <button id="closeShareBtn" class="btn btn-secondary">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════
+const nav = {
+  current: 'home',
+  go(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+    const el = document.getElementById(page + 'Page');
+    if (el) { el.classList.add('active'); this.current = page; }
+    if (page === 'channels' && !app.state.loaded.live)    app.loadSection('live');
+    if (page === 'movies'   && !app.state.loaded.movies)  app.loadSection('movies');
+    if (page === 'series'   && !app.state.loaded.series)  app.loadSection('series');
+    if (page === 'favorites') app.renderFavorites();
+    if (page === 'home')      app.renderContinue();
+  }
+};
+
+// ═══════════════════════════════════════════════════
+// FUZZY SEARCH  (normaliza acentos + correspondência parcial)
+// ═══════════════════════════════════════════════════
+function normalize(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ').trim();
+}
+function fuzzy(query, target) {
+  const q = normalize(query), t = normalize(target);
+  if (!q) return true;
+  if (t.includes(q)) return true;
+  // every word in query appears somewhere in target
+  if (query.trim().split(/\s+/).map(normalize).every(w => t.includes(w))) return true;
+  // sequential char match (handles typos / missing accents)
+  let qi = 0;
+  for (let i = 0; i < t.length && qi < q.length; i++) if (t[i] === q[qi]) qi++;
+  return qi === q.length;
+}
+
+// ═══════════════════════════════════════════════════
+// APP
+// ═══════════════════════════════════════════════════
+const app = {
+  state: {
+    creds: null, userInfo: null,
+    servers: [],
+    loaded: { live:false, movies:false, series:false },
+    data:   { live:[], movies:[], series:[] },
+    cats:   { live:[], movies:[], series:[] },
+    curCat: { live:'all', movies:'all', series:'all' },
+    search: { live:'', movies:'', series:'' },
+    shown:  { live:0, movies:0, series:0 },
+    PAGE: 50,
+    favorites: new Set(),
+    favData: {},
+    history: [],
+    hls: null,
+    cur: null,
+    isLive: false,
+    pendingCfg: null
+  },
+
+  // ── Storage ──
+  loadStorage() {
+    try { const f=localStorage.getItem('hf_fav'); if(f){const p=JSON.parse(f);this.state.favorites=new Set(p.ids||[]);this.state.favData=p.data||{};} } catch(e){}
+    try { const h=localStorage.getItem('hf_hist'); if(h) this.state.history=JSON.parse(h); } catch(e){}
+    try { const s=localStorage.getItem('hf_srvs'); if(s) this.state.servers=JSON.parse(s); } catch(e){}
+  },
+  saveFav()     { try{localStorage.setItem('hf_fav', JSON.stringify({ids:[...this.state.favorites],data:this.state.favData}));}catch(e){} },
+  saveHist()    { try{localStorage.setItem('hf_hist',JSON.stringify(this.state.history.slice(0,50)));}catch(e){} },
+  saveSrvs()    { try{localStorage.setItem('hf_srvs',JSON.stringify(this.state.servers));}catch(e){} },
+
+  // ── Init ──
+  init() {
+    this.loadStorage();
+    this.checkUrl();
+    this.bindEvents();
+    this.updateFavCount();
+  },
+
+  bindEvents() {
+    document.getElementById('loginBtn').onclick    = () => this.login();
+    document.getElementById('decryptBtn').onclick  = () => this.decrypt();
+    document.getElementById('homeServerBtn').onclick = () => this.showServerModal();
+    document.getElementById('addSrvBtn').onclick   = () => this.addServer();
+    document.getElementById('generateBtn').onclick = () => this.generateUrl();
+    document.getElementById('copyBtn').onclick     = () => this.copyUrl();
+    document.getElementById('testBtn').onclick     = () => window.open(document.getElementById('shareUrlBox').textContent,'_blank');
+    document.getElementById('shareBackBtn').onclick = () => { document.getElementById('shareStep1').style.display=''; document.getElementById('shareStep2').style.display='none'; };
+    document.getElementById('closeShareBtn').onclick = () => this.closeModal('shareModal');
+    document.getElementById('playerBack').onclick  = () => this.closePlayer();
+    document.getElementById('btnPlay').onclick     = () => this.togglePlay();
+    document.getElementById('btnMute').onclick     = () => this.toggleMute();
+    document.getElementById('btnFs').onclick       = () => this.toggleFs();
+    document.getElementById('btnRew').onclick      = () => { const v=this.vid(); v.currentTime=Math.max(0,v.currentTime-10); };
+    document.getElementById('btnFwd').onclick      = () => { const v=this.vid(); v.currentTime=Math.min(v.duration||0,v.currentTime+10); };
+    document.getElementById('playerSeek').oninput  = e => { const v=this.vid(); if(v.duration) v.currentTime=(e.target.value/100)*v.duration; };
+
+    // Search debounce
+    [{el:'liveSearch',t:'live'},{el:'moviesSearch',t:'movies'},{el:'seriesSearch',t:'series'}].forEach(({el,t}) => {
+      let timer;
+      document.getElementById(el).oninput = e => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          this.state.search[t] = e.target.value;
+          this.state.shown[t] = 0;
+          this.renderList(t);
+        }, 220);
+      };
+    });
+
+    // Player overlay tap
+    document.getElementById('playerWrap').onclick = () => {
+      const o = document.getElementById('playerOverlay');
+      o.classList.toggle('visible');
+      if (o.classList.contains('visible')) {
+        clearTimeout(this._ot);
+        this._ot = setTimeout(() => o.classList.remove('visible'), 4500);
+      }
+    };
+
+    // Video events
+    const v = this.vid();
+    v.onwaiting    = () => document.getElementById('bufSpinner').classList.add('show');
+    v.onplaying    = () => { document.getElementById('bufSpinner').classList.remove('show'); document.getElementById('btnPlay').textContent='⏸'; };
+    v.onpause      = () => document.getElementById('btnPlay').textContent='▶️';
+    v.ontimeupdate = () => this.onProgress();
+    v.onended      = () => this.onEnded();
+    v.ondurationchange = () => {
+      if (v.duration && !isNaN(v.duration))
+        document.getElementById('timeDuration').textContent = this.fmt(v.duration);
+    };
+
+    // Modal backdrop close
+    document.querySelectorAll('.modal').forEach(m => m.onclick = e => { if(e.target===m) this.closeModal(m.id); });
+  },
+
+  checkUrl() {
+    const p = new URLSearchParams(location.search).get('config');
+    if (p) { this.state.pendingCfg = decodeURIComponent(p); document.getElementById('passwordModal').classList.add('active'); }
+  },
+
+  // ── Auth ──
+  async login() {
+    const su = document.getElementById('serverUrl').value.trim().replace(/\/$/,'');
+    const u  = document.getElementById('username').value.trim();
+    const pw = document.getElementById('password').value.trim();
+    if (!su || !u) { this.notify('Preencha todos os campos','warning'); return; }
+    this.notify('A conectar…','info');
+    const creds = {serverUrl:su, username:u, password:pw};
+    if (await this.connect(creds)) {
+      this.state.creds = creds;
+      this.addSrv(creds);
+      await this.startApp();
+    } else {
+      this.notify('Falha na ligação. Verifique as credenciais.','error');
+    }
+  },
+
+  async connect(creds) {
+    try {
+      const url = `${creds.serverUrl}/player_api.php?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}`;
+      const r = await fetch(url, {signal: AbortSignal.timeout(12000)});
+      const d = await r.json();
+      if (d.user_info?.auth===1) { this.state.userInfo = d.user_info; return true; }
+      return false;
+    } catch(e) { return false; }
+  },
+
+  addSrv(c) {
+    const exists = this.state.servers.find(s => s.serverUrl===c.serverUrl && s.username===c.username);
+    if (!exists) {
+      try { this.state.servers.unshift({...c, label: new URL(c.serverUrl).hostname}); } catch(e) { this.state.servers.unshift(c); }
+      if (this.state.servers.length > 10) this.state.servers.pop();
+      this.saveSrvs();
+    }
+  },
+
+  async startApp() {
+    document.getElementById('loginPage').classList.remove('active');
+    const app = document.getElementById('app');
+    app.style.display='flex'; app.style.flexDirection='column'; app.style.height='100%';
+    document.getElementById('userLabel').textContent = this.state.creds.username;
+    this.displayExpiry();
+    this.updateFavCount();
+    this.renderContinue();
+    this.notify('Ligado! 🚀','success');
+    setTimeout(() => this.notify('💡 Se houver erros, toque em "Servidor" para trocar','info'), 2200);
+    this.loadHomeCounts();
+  },
+
+  async loadHomeCounts() {
+    const types = ['live','movies','series'];
+    const ids   = {live:'liveCount', movies:'moviesCount', series:'seriesCount'};
+    const acts  = {live:'get_live_streams', movies:'get_vod_streams', series:'get_series'};
+    const cacts = {live:'get_live_categories', movies:'get_vod_categories', series:'get_series_categories'};
+    const lbl   = {live:'canais', movies:'filmes', series:'séries'};
+
+    for (const t of types) {
+      try {
+        const [dr, cr] = await Promise.all([
+          fetch(this.url(`action=${acts[t]}`), {signal:AbortSignal.timeout(20000)}),
+          fetch(this.url(`action=${cacts[t]}`), {signal:AbortSignal.timeout(10000)})
+        ]);
+        const [data, cats] = await Promise.all([dr.json(), cr.json()]);
+        this.state.data[t]   = Array.isArray(data) ? data : [];
+        this.state.cats[t]   = Array.isArray(cats) ? cats : [];
+        this.state.loaded[t] = true;
+        document.getElementById(ids[t]).textContent = `${this.state.data[t].length} ${lbl[t]}`;
+      } catch(e) {
+        document.getElementById(ids[t]).textContent = 'Erro ao carregar';
+      }
+    }
+  },
+
+  async loadSection(type) {
+    if (this.state.loaded[type]) { this.renderCats(type); this.renderList(type); return; }
+    const listId = {live:'liveList', movies:'moviesList', series:'seriesList'}[type];
+    document.getElementById(listId).innerHTML = this.skelHtml();
+    const acts  = {live:'get_live_streams', movies:'get_vod_streams', series:'get_series'};
+    const cacts = {live:'get_live_categories', movies:'get_vod_categories', series:'get_series_categories'};
+    try {
+      const [dr, cr] = await Promise.all([
+        fetch(this.url(`action=${acts[type]}`), {signal:AbortSignal.timeout(25000)}),
+        fetch(this.url(`action=${cacts[type]}`), {signal:AbortSignal.timeout(12000)})
+      ]);
+      const [data, cats] = await Promise.all([dr.json(), cr.json()]);
+      this.state.data[type]   = Array.isArray(data) ? data : [];
+      this.state.cats[type]   = Array.isArray(cats) ? cats : [];
+      this.state.loaded[type] = true;
+      this.renderCats(type);
+      this.renderList(type);
+    } catch(e) {
+      document.getElementById(listId).innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Erro ao carregar</div><div class="empty-sub">Tente trocar de servidor</div></div>`;
+    }
+  },
+
+  // ── Categories ──
+  renderCats(type) {
+    const ids = {live:'liveCats', movies:'moviesCats', series:'seriesCats'};
+    const el = document.getElementById(ids[type]);
+    const cur = this.state.curCat[type];
+    el.innerHTML = `<span class="cat-pill ${cur==='all'?'active':''}" onclick="app.setCat('${type}','all')">Todos</span>` +
+      this.state.cats[type].map(c =>
+        `<span class="cat-pill ${cur===String(c.category_id)?'active':''}" onclick="app.setCat('${type}','${c.category_id}')">${this.esc(c.category_name)}</span>`
+      ).join('');
+  },
+
+  setCat(type, id) {
+    this.state.curCat[type] = id;
+    this.state.shown[type] = 0;
+    this.renderCats(type);
+    this.renderList(type);
+  },
+
+  // ── List Rendering ──
+  filtered(type) {
+    let list = this.state.data[type];
+    const cat = this.state.curCat[type];
+    const q   = this.state.search[type];
+    if (cat !== 'all') list = list.filter(c => String(c.category_id)===String(cat));
+    if (q && q.trim()) list = list.filter(c => fuzzy(q.trim(), c.name||c.title||''));
+    return list;
+  },
+
+  renderList(type) {
+    const listId  = {live:'liveList',    movies:'moviesList',    series:'seriesList'}[type];
+    const badgeId = {live:'liveResultBadge', movies:'moviesResultBadge', series:'seriesResultBadge'}[type];
+    const container = document.getElementById(listId);
+    const badge     = document.getElementById(badgeId);
+    const list = this.filtered(type);
+    const q    = (this.state.search[type]||'').trim();
+
+    if (q) {
+      badge.textContent = `${list.length} resultado${list.length!==1?'s':''} para "${q}"`;
+      badge.style.display = 'inline-flex';
+    } else { badge.style.display = 'none'; }
+
+    if (!list.length) {
+      container.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">Sem resultados</div><div class="empty-sub">Tente pesquisar de outra forma</div></div>`;
+      return;
+    }
+
+    const shown = Math.max(this.state.PAGE, this.state.shown[type] + this.state.PAGE);
+    const page  = list.slice(0, shown);
+    this.state.shown[type] = page.length;
+
+    const icon = {live:'📺', movies:'🎬', series:'🎭'}[type];
+    const badgeHtml = {
+      live:   '<span class="badge badge-live">AO VIVO</span>',
+      movies: '<span class="badge badge-movie">FILME</span>',
+      series: '<span class="badge badge-series">SÉRIE</span>'
+    }[type];
+
+    container.innerHTML = page.map(ch => {
+      const id   = this.getId(ch, type);
+      const name = this.esc(ch.name||ch.title||'Desconhecido');
+      const thumb = ch.stream_icon||ch.cover||'';
+      const isFav = this.state.favorites.has(id);
+      const thumbEl = thumb
+        ? `<div class="content-thumb"><img src="${thumb}" onerror="this.parentElement.innerHTML='${icon}'"></div>`
+        : `<div class="content-thumb">${icon}</div>`;
+      const dlBtn = type!=='live'
+        ? `<button class="dl-btn" onclick="event.stopPropagation();app.dlContent('${id}','${type}')" title="Download">⬇️</button>` : '';
+
+      return `<div class="content-item" onclick="app.itemClick(${JSON.stringify(JSON.stringify(ch))},'${type}')">
+        ${thumbEl}
+        <div class="content-info">
+          <div class="content-name">${name}</div>
+          <div class="content-meta">${badgeHtml}</div>
+        </div>
+        <div class="content-actions">
+          ${dlBtn}
+          <button class="icon-btn${isFav?' fav-active':''}"
+            onclick="event.stopPropagation();app.toggleFav('${id}',${JSON.stringify(JSON.stringify(ch))},'${type}')"
+            title="${isFav?'Remover':'Favorito'}">
+            ${isFav?'★':'☆'}
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+
+    if (page.length < list.length) {
+      container.innerHTML += `<div style="padding:20px;text-align:center;">
+        <button class="btn btn-secondary" style="width:auto;padding:10px 24px;" onclick="app.loadMore('${type}')">
+          Carregar mais (${list.length-page.length} restantes)
+        </button>
+      </div>`;
+    }
+  },
+
+  loadMore(type) {
+    const wrap = document.getElementById({live:'channelsPage',movies:'moviesPage',series:'seriesPage'}[type]);
+    const scrollY = wrap ? wrap.scrollTop : 0;
+    this.renderList(type);
+    if (wrap) wrap.scrollTop = scrollY;
+  },
+
+  itemClick(chJson, type) {
+    const ch = JSON.parse(chJson);
+    type==='series' ? this.showEpisodes(ch) : this.play(ch, type);
+  },
+
+  // ── Playback ──
+  play(ch, type) {
+    const {serverUrl,username,password} = this.state.creds;
+    let url='', isLive = type==='live';
+    if (type==='live')   url = `${serverUrl}/live/${username}/${password}/${ch.stream_id}.m3u8`;
+    if (type==='movies') { const ext=ch.container_extension||'mp4'; url=`${serverUrl}/movie/${username}/${password}/${ch.stream_id}.${ext}`; }
+    this.playStream(url, ch.name||ch.title, this.getId(ch,type), type, isLive, ch);
+  },
+
+  playEp(epJson, serJson) {
+    const ep=JSON.parse(epJson), ser=JSON.parse(serJson);
+    this.closeModal('episodesModal');
+    const {serverUrl,username,password}=this.state.creds;
+    const ext=ep.container_extension||'mp4';
+    const url=`${serverUrl}/series/${username}/${password}/${ep.id}.${ext}`;
+    const name=`${ser.name} – T${ep.season}E${ep.episode_num}`;
+    const id=`ser_${ser.series_id}_s${ep.season}e${ep.episode_num}`;
+    this.playStream(url,name,id,'series',false,ser,ep);
+  },
+
+  playStream(url, name, id, type, isLive, chData) {
+    const v = this.vid();
+    if (this.state.hls) { this.state.hls.destroy(); this.state.hls=null; }
+    v.pause(); v.src='';
+
+    this.state.cur    = {url,name,id,type,isLive};
+    this.state.isLive = isLive;
+
+    document.getElementById('playerTitle').textContent    = name||'';
+    document.getElementById('playerSubtitle').textContent = isLive?'🔴 AO VIVO': type==='movies'?'🎬 Filme':'🎭 Série';
+    document.getElementById('seekWrap').style.display     = isLive?'none':'';
+    document.getElementById('btnRew').style.display       = isLive?'none':'';
+    document.getElementById('btnFwd').style.display       = isLive?'none':'';
+    document.getElementById('playerDlBtn').style.display  = isLive?'none':'';
+    if (!isLive) document.getElementById('playerDlBtn').onclick = () => this.dlStream(url, name);
+
+    document.getElementById('playerPage').classList.add('active');
+    const ov = document.getElementById('playerOverlay');
+    ov.classList.add('visible');
+    clearTimeout(this._ot);
+    this._ot = setTimeout(() => ov.classList.remove('visible'), 4500);
+
+    const hist = this.state.history.find(h=>h.id===id);
+    const savedPos = hist?.progress||0;
+    document.getElementById('bufSpinner').classList.add('show');
+
+    if (url.includes('.m3u8') || isLive) {
+      if (Hls.isSupported()) {
+        this.state.hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+          // Buffer generoso para absorver falhas de rede
+          maxBufferLength:        isLive ? 60 : 120,
+          maxMaxBufferLength:     isLive ? 120 : 300,
+          backBufferLength:       isLive ? 60 : 90,
+          maxBufferHole:          0.5,
+          highBufferWatchdogPeriod: 10,
+          nudgeMaxRetry:          10,
+          liveSyncDurationCount:  isLive ? 8 : 3,
+          startFragPrefetch:      true,
+          manifestLoadingTimeOut: 15000,
+          manifestLoadingMaxRetry: 8,
+          fragLoadingTimeOut:     20000,
+          fragLoadingMaxRetry:    10
+        });
+        this.state.hls.loadSource(url);
+        this.state.hls.attachMedia(v);
+        this.state.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (savedPos && !isLive) v.currentTime = savedPos;
+          v.play().catch(()=>{});
+          this.updateBuf();
+        });
+        this.state.hls.on(Hls.Events.BUFFER_APPENDED, () => this.updateBuf());
+        this.state.hls.on(Hls.Events.FRAG_BUFFERED,   () => this.updateBuf());
+        this.state.hls.on(Hls.Events.ERROR, (ev, data) => {
+          if (!data.fatal) return;
+          if (data.type===Hls.ErrorTypes.NETWORK_ERROR) {
+            this.notify('⚠️ Problema de rede — a recuperar automaticamente…','warning');
+            this.state.hls.startLoad();
+          } else if (data.type===Hls.ErrorTypes.MEDIA_ERROR) {
+            this.notify('⚠️ Erro de media — a tentar recuperar…','warning');
+            this.state.hls.recoverMediaError();
+          } else {
+            this.notify('❌ Erro no stream. Tente trocar de servidor.','error');
+          }
+        });
+      } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+        v.src = url;
+        if (savedPos && !isLive) v.currentTime = savedPos;
+        v.play().catch(()=>{});
+      }
+    } else {
+      v.src = url; v.load();
+      if (savedPos) v.currentTime = savedPos;
+      v.play().catch(()=>{});
+    }
+
+    this.addHist({id, name, type, url, thumb:chData?.stream_icon||chData?.cover||'', progress:savedPos, duration:0});
+  },
+
+  updateBuf() {
+    const v = this.vid();
+    if (!v.buffered.length || !v.duration) return;
+    const pct = (v.buffered.end(v.buffered.length-1) / v.duration) * 100;
+    document.getElementById('bufFill').style.width = Math.min(100,pct)+'%';
+  },
+
+  onProgress() {
+    const v = this.vid();
+    if (!v.duration || isNaN(v.duration)) return;
+    const pct = (v.currentTime/v.duration)*100;
+    document.getElementById('playerSeek').value = pct;
+    document.getElementById('timeCurrent').textContent = this.fmt(v.currentTime);
+    this.updateBuf();
+    if (this.state.cur && !this.state.isLive && Math.floor(v.currentTime)%5===0) {
+      const idx = this.state.history.findIndex(h=>h.id===this.state.cur.id);
+      if (idx>=0) {
+        this.state.history[idx].progress = v.currentTime;
+        this.state.history[idx].duration = v.duration;
+        this.state.history[idx].timestamp = Date.now();
+        this.saveHist();
+      }
+    }
+  },
+
+  onEnded() {
+    if (!this.state.cur) return;
+    const idx = this.state.history.findIndex(h=>h.id===this.state.cur.id);
+    if (idx>=0) { this.state.history[idx].progress=0; this.state.history[idx].completed=true; this.saveHist(); }
+  },
+
+  togglePlay()  { const v=this.vid(); v.paused?v.play():v.pause(); },
+  toggleMute()  { const v=this.vid(); v.muted=!v.muted; document.getElementById('btnMute').textContent=v.muted?'🔇':'🔊'; },
+  toggleFs()    {
+    const el=document.getElementById('playerPage');
+    if (!document.fullscreenElement) (el.requestFullscreen||el.webkitRequestFullscreen).call(el);
+    else (document.exitFullscreen||document.webkitExitFullscreen).call(document);
+  },
+
+  closePlayer() {
+    this.vid().pause();
+    if (this.state.hls) { this.state.hls.destroy(); this.state.hls=null; }
+    document.getElementById('playerPage').classList.remove('active');
+    this.saveHist();
+    this.renderContinue();
+  },
+
+  // ── History ──
+  addHist(item) {
+    const idx = this.state.history.findIndex(h=>h.id===item.id);
+    if (idx>=0) this.state.history[idx] = {...this.state.history[idx],...item,timestamp:Date.now()};
+    else this.state.history.unshift({...item,timestamp:Date.now()});
+    if (this.state.history.length>50) this.state.history=this.state.history.slice(0,50);
+    this.saveHist();
+  },
+
+  renderContinue() {
+    const recent = this.state.history.filter(h=>!h.completed && h.progress>5).slice(0,10);
+    const render = items => items.map(h => {
+      const pct = h.duration ? Math.round((h.progress/h.duration)*100) : 0;
+      const ic  = h.type==='live'?'📺':h.type==='movies'?'🎬':'🎭';
+      const img = h.thumb
+        ? `<img src="${h.thumb}" onerror="this.outerHTML='<span style=font-size:28px>${ic}</span>'">`
+        : `<span style="font-size:28px">${ic}</span>`;
+      return `<div class="continue-card" onclick="app.resumeHist('${h.id}')">
+        <div class="continue-thumb">
+          ${img}
+          <div class="continue-overlay"><div class="play-circle">▶</div></div>
+          <div class="continue-prog-bar"><div class="continue-prog-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div class="continue-info">
+          <div class="continue-name">${this.esc(h.name)}</div>
+          <div class="continue-sub">${h.duration?this.fmt(h.duration-h.progress)+' restantes':'Continuar'}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    const sec  = document.getElementById('continueSection');
+    const list = document.getElementById('continueList');
+    const fsec = document.getElementById('favContinueSection');
+    const flis = document.getElementById('favContinueList');
+
+    if (recent.length) {
+      sec.style.display=''; list.innerHTML=render(recent);
+      if(fsec){fsec.style.display=''; flis.innerHTML=render(recent);}
+    } else {
+      sec.style.display='none';
+      if(fsec) fsec.style.display='none';
+    }
+  },
+
+  resumeHist(id) {
+    const item = this.state.history.find(h=>h.id===id);
+    if (!item) return;
+    const ch = this.state.data[item.type]?.find(c=>this.getId(c,item.type)===id);
+    if (ch) this.play(ch,item.type);
+    else this.playStream(item.url,item.name,item.id,item.type,item.type==='live',{stream_icon:item.thumb});
+  },
+
+  // ── Favorites ──
+  toggleFav(id, chJson, type) {
+    if (this.state.favorites.has(id)) {
+      this.state.favorites.delete(id);
+      delete this.state.favData[id];
+      this.notify('Removido dos favoritos','info');
+    } else {
+      this.state.favorites.add(id);
+      const ch = chJson?JSON.parse(chJson):null;
+      if (ch) this.state.favData[id]={ch,type};
+      this.notify('Adicionado aos favoritos ⭐','success');
+    }
+    this.saveFav(); this.updateFavCount();
+    this.renderList(type);
+    if (nav.current==='favorites') this.renderFavorites();
+  },
+
+  updateFavCount() {
+    const n = this.state.favorites.size;
+    const el = document.getElementById('favCountHome');
+    if (el) el.textContent = `${n} guardados`;
+  },
+
+  renderFavorites() {
+    this.renderContinue();
+    const list  = document.getElementById('favList');
+    const badge = document.getElementById('favCountBadge');
+    badge.textContent = this.state.favorites.size;
+    if (!this.state.favorites.size) {
+      list.innerHTML=`<div class="empty"><div class="empty-icon">⭐</div><div class="empty-title">Sem favoritos</div><div class="empty-sub">Toque na estrela em qualquer conteúdo</div></div>`;
+      return;
+    }
+    const html = [...this.state.favorites].map(id => {
+      const d = this.state.favData[id];
+      if (!d) return '';
+      const {ch, type} = d;
+      const name = this.esc(ch?.name||ch?.title||'Desconhecido');
+      const ic   = type==='live'?'📺':type==='movies'?'🎬':'🎭';
+      const thumb = ch?.stream_icon||ch?.cover||'';
+      const te   = thumb?`<div class="content-thumb"><img src="${thumb}" onerror="this.parentElement.innerHTML='${ic}'"></div>`:`<div class="content-thumb">${ic}</div>`;
+      return `<div class="content-item" onclick="app.itemClick(${JSON.stringify(JSON.stringify(ch))},'${type}')">
+        ${te}
+        <div class="content-info"><div class="content-name">${name}</div></div>
+        <button class="icon-btn fav-active" onclick="event.stopPropagation();app.toggleFav('${id}',null,'${type}')">★</button>
+      </div>`;
+    }).filter(Boolean);
+    list.innerHTML = html.join('')||`<div class="empty"><div class="empty-icon">⭐</div><div class="empty-title">Sem favoritos</div></div>`;
+  },
+
+  // ── Server Modal ──
+  showServerModal() {
+    const c = this.state.creds;
+    document.getElementById('curServerUrl').textContent  = c?.serverUrl||'-';
+    document.getElementById('curServerUser').textContent = c?`👤 ${c.username}`:'';
+    const el = document.getElementById('savedServersList');
+    if (this.state.servers.length>1) {
+      el.innerHTML = `<div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;">Servidores Guardados</div>` +
+        this.state.servers.map((s,i) => {
+          const cur = s.serverUrl===c?.serverUrl && s.username===c?.username;
+          return `<div class="server-item${cur?' current':''}" onclick="app.switchSrv(${i})">
+            <div class="server-dot${cur?' on':''}"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${this.esc(s.label||s.serverUrl)}</div>
+              <div style="font-size:12px;color:var(--text3);">👤 ${this.esc(s.username)}</div>
+            </div>
+            ${cur?'<span>✅</span>':''}
+          </div>`;
+        }).join('');
+    } else { el.innerHTML=''; }
+    document.getElementById('serverModal').classList.add('active');
+  },
+
+  async switchSrv(i) {
+    const s = this.state.servers[i];
+    if (!s) return;
+    this.notify('A verificar servidor…','info');
+    const ok = await this.connect(s);
+    if (ok) {
+      this.state.creds  = s;
+      this.state.loaded = {live:false,movies:false,series:false};
+      this.state.data   = {live:[],movies:[],series:[]};
+      this.notify('Servidor trocado! ✅','success');
+      this.closeModal('serverModal');
+      this.loadHomeCounts();
+    } else {
+      this.notify('Não foi possível ligar a este servidor','error');
+    }
+  },
+
+  async addServer() {
+    const su=document.getElementById('newSrvUrl').value.trim().replace(/\/$/,'');
+    const u =document.getElementById('newSrvUser').value.trim();
+    const pw=document.getElementById('newSrvPass').value.trim();
+    if (!su||!u) { this.notify('Preencha URL e utilizador','warning'); return; }
+    this.notify('A verificar…','info');
+    const c={serverUrl:su,username:u,password:pw};
+    if (await this.connect(c)) {
+      this.state.creds  = c;
+      this.addSrv(c);
+      this.state.loaded = {live:false,movies:false,series:false};
+      this.state.data   = {live:[],movies:[],series:[]};
+      this.closeModal('serverModal');
+      this.notify('Servidor adicionado e ligado! ✅','success');
+      this.loadHomeCounts();
+      ['newSrvUrl','newSrvUser','newSrvPass'].forEach(id=>document.getElementById(id).value='');
+    } else {
+      this.notify('Falha ao ligar a este servidor','error');
+    }
+  },
+
+  // ── Downloads ──
+  dlContent(id, type) {
+    const ch = this.state.data[type]?.find(c=>this.getId(c,type)===id);
+    if (!ch) return;
+    const {serverUrl,username,password}=this.state.creds;
+    let url='';
+    if (type==='movies') { const ext=ch.container_extension||'mp4'; url=`${serverUrl}/movie/${username}/${password}/${ch.stream_id}.${ext}`; }
+    if (url) this.dlStream(url, ch.name||ch.title||'download');
+  },
+
+  dlStream(url, name) {
+    this.notify('A iniciar download…','info');
+    const a = document.createElement('a');
+    a.href=url; a.download=(name||'download').replace(/[^\w\s\-_.]/g,'_'); a.target='_blank';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  },
+
+  // ── Episodes ──
+  async showEpisodes(series) {
+    const modal = document.getElementById('episodesModal');
+    const list  = document.getElementById('episodesList');
+    document.getElementById('episodesTitle').textContent = series.name||series.title;
+    list.innerHTML = `<div style="padding:50px;text-align:center;"><div class="spinner" style="margin:0 auto;"></div></div>`;
+    modal.classList.add('active');
+    try {
+      const r = await fetch(this.url(`action=get_series_info&series_id=${series.series_id}`),{signal:AbortSignal.timeout(15000)});
+      const d = await r.json();
+      if (!d.episodes||!Object.keys(d.episodes).length) {
+        list.innerHTML=`<div class="empty"><div class="empty-icon">📺</div><div class="empty-title">Sem episódios</div></div>`; return;
+      }
+      list.innerHTML = Object.keys(d.episodes).sort((a,b)=>a-b).map(s => {
+        const eps = d.episodes[s];
+        return `<div class="season-title">Temporada ${s}</div>` +
+          eps.map(ep => {
+            const dlUrl=`${this.state.creds.serverUrl}/series/${this.state.creds.username}/${this.state.creds.password}/${ep.id}.${ep.container_extension||'mp4'}`;
+            return `<div class="content-item" style="margin:0 20px 8px;"
+              onclick="app.playEp(${JSON.stringify(JSON.stringify(ep))},${JSON.stringify(JSON.stringify(series))})">
+              <div class="content-thumb">🎬</div>
+              <div class="content-info">
+                <div class="content-name">Ep ${ep.episode_num}: ${this.esc(ep.title||'Sem título')}</div>
+                <div class="content-meta">${ep.info?.duration||''}</div>
+              </div>
+              <button class="dl-btn" onclick="event.stopPropagation();app.dlStream('${dlUrl}','${this.esc(series.name)}_S${s}E${ep.episode_num}')">⬇️</button>
+            </div>`;
+          }).join('');
+      }).join('');
+    } catch(e) {
+      list.innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Erro ao carregar episódios</div></div>`;
+    }
+  },
+
+  // ── Expiry ──
+  displayExpiry() {
+    const el=document.getElementById('expiryBadge');
+    const info=this.state.userInfo;
+    if (!info?.exp_date){el.style.display='none';return;}
+    const ts=parseInt(info.exp_date);
+    if (!ts){el.innerHTML='<span class="badge badge-movie">Vitalício ♾️</span>';el.style.display='';return;}
+    const exp=new Date(ts*1000), days=Math.ceil((exp-Date.now())/86400000), ds=exp.toLocaleDateString('pt-PT');
+    if (days<0)      el.innerHTML=`<span class="badge badge-live">Expirado</span>`;
+    else if (days<=7) el.innerHTML=`<span class="badge badge-live">Expira em ${days}d (${ds})</span>`;
+    else              el.innerHTML=`<span class="badge badge-series">Válido até ${ds}</span>`;
+    el.style.display='';
+  },
+
+  // ── Share ──
+  showShare() {
+    document.getElementById('shareStep1').style.display='';
+    document.getElementById('shareStep2').style.display='none';
+    document.getElementById('shareModal').classList.add('active');
+  },
+
+  async generateUrl() {
+    const pw=document.getElementById('sharePassword').value;
+    if (!pw||pw.length<4){this.notify('Mínimo 4 caracteres','warning');return;}
+    try {
+      const cfg={credentials:this.state.creds,favorites:[...this.state.favorites]};
+      const enc = window.crypto?.subtle
+        ? await this.encrypt(JSON.stringify(cfg),pw)
+        : btoa(JSON.stringify({...cfg,_pass:btoa(pw)}));
+      const base=location.protocol==='file:'?location.href.split('?')[0]:`${location.origin}${location.pathname}`;
+      document.getElementById('shareUrlBox').textContent=`${base}?config=${encodeURIComponent(enc)}`;
+      document.getElementById('sharePassShow').textContent=pw;
+      document.getElementById('shareStep1').style.display='none';
+      document.getElementById('shareStep2').style.display='';
+      this.notify('URL gerado! ✅','success');
+    } catch(e){ this.notify('Erro ao gerar URL','error'); }
+  },
+
+  async copyUrl() {
+    const url=document.getElementById('shareUrlBox').textContent;
+    try { await (navigator.clipboard?.writeText(url)||Promise.reject()); this.notify('URL copiado! ✅','success'); }
+    catch(e) { const ta=document.createElement('textarea'); ta.value=url; ta.style.cssText='position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); this.notify('URL copiado! ✅','success'); }
+  },
+
+  // ── Decrypt ──
+  async decrypt() {
+    const pw=document.getElementById('decryptPassword').value;
+    if (!pw) return;
+    try {
+      let cfg;
+      try {
+        const dec=JSON.parse(atob(this.state.pendingCfg));
+        if (dec._pass) { if(atob(dec._pass)!==pw) throw new Error('wrong'); delete dec._pass; cfg=dec; }
+        else cfg=JSON.parse(await this.decryptData(this.state.pendingCfg,pw));
+      } catch(e) { cfg=JSON.parse(await this.decryptData(this.state.pendingCfg,pw)); }
+      this.state.creds=cfg.credentials;
+      if (cfg.favorites){this.state.favorites=new Set(cfg.favorites);this.saveFav();}
+      const ok=await this.connect(this.state.creds);
+      this.closeModal('passwordModal');
+      this.addSrv(this.state.creds);
+      await this.startApp();
+      if (!ok) this.notify('Servidor temporariamente indisponível','warning');
+      try{if(location.protocol!=='file:')history.replaceState({},'',location.pathname);}catch(e){}
+    } catch(e) { this.notify('Palavra-passe incorreta!','error'); document.getElementById('decryptPassword').value=''; }
+  },
+
+  // ── Crypto ──
+  async encrypt(text, pw) {
+    const e=new TextEncoder(), s=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
+    const k=await crypto.subtle.deriveKey({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},
+      await crypto.subtle.importKey('raw',e.encode(pw),'PBKDF2',false,['deriveKey']),
+      {name:'AES-GCM',length:256},false,['encrypt']);
+    const enc=await crypto.subtle.encrypt({name:'AES-GCM',iv},k,e.encode(text));
+    const out=new Uint8Array(28+enc.byteLength); out.set(s); out.set(iv,16); out.set(new Uint8Array(enc),28);
+    return btoa(String.fromCharCode(...out));
+  },
+
+  async decryptData(b64, pw) {
+    const c=Uint8Array.from(atob(b64),x=>x.charCodeAt(0)),s=c.slice(0,16),iv=c.slice(16,28),enc=c.slice(28);
+    const e=new TextEncoder();
+    const k=await crypto.subtle.deriveKey({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},
+      await crypto.subtle.importKey('raw',e.encode(pw),'PBKDF2',false,['deriveKey']),
+      {name:'AES-GCM',length:256},false,['decrypt']);
+    return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv},k,enc));
+  },
+
+  // ── Logout ──
+  logout() {
+    if(this.state.hls){this.state.hls.destroy();this.state.hls=null;}
+    this.state.creds=null; this.state.userInfo=null;
+    this.state.loaded={live:false,movies:false,series:false};
+    this.state.data={live:[],movies:[],series:[]};
+    document.getElementById('app').style.display='none';
+    document.getElementById('loginPage').classList.add('active');
+    this.notify('Sessão terminada','info');
+  },
+
+  // ── Utilities ──
+  closeModal(id) { document.getElementById(id).classList.remove('active'); },
+  url(params)    { const {serverUrl,username,password}=this.state.creds; return `${serverUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&${params}`; },
+  getId(ch,t)    { return `${t}_${ch.stream_id||ch.series_id||ch.num||Math.random()}`; },
+  vid()          { return document.getElementById('mainVideo'); },
+  fmt(s)         { if(!s||isNaN(s))return'0:00'; const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60); return h>0?`${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`:`${m}:${String(sec).padStart(2,'0')}`; },
+  esc(s)         { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; },
+  skelHtml()     { return Array(6).fill(0).map(()=>`<div class="skel-item"><div class="skeleton" style="width:50px;height:50px;border-radius:10px;flex-shrink:0;"></div><div style="flex:1;"><div class="skeleton" style="height:15px;width:68%;margin-bottom:8px;"></div><div class="skeleton" style="height:11px;width:38%;"></div></div></div>`).join(''); },
+
+  notify(msg, type='info') {
+    const d=document.createElement('div');
+    d.className=`notif ${type}`; d.textContent=msg;
+    document.getElementById('notifications').appendChild(d);
+    setTimeout(()=>{d.classList.add('hiding');setTimeout(()=>d.remove(),200);},3600);
+  }
+};
+
+document.addEventListener('DOMContentLoaded',()=>app.init());
+</script>
+</body>
+</html>
